@@ -6,7 +6,6 @@ var playTorrent = window.playTorrent = function (torrent, subs, movieModel, call
   videoStreamer ? $(document).trigger('videoExit') : null;
 
   // Create a unique file to cache the video (with a microtimestamp) to prevent read conflicts
-  var tmpFolder = path.join(os.tmpDir(), 'Popcorn-Time')
   var tmpFilename = ( torrent.toLowerCase().split('/').pop().split('.torrent').shift() ).slice(0,100);
   tmpFilename = tmpFilename.replace(/([^a-zA-Z0-9-_])/g, '_') + '.mp4';
   var tmpFile = path.join(tmpFolder, tmpFilename);
@@ -14,10 +13,10 @@ var playTorrent = window.playTorrent = function (torrent, subs, movieModel, call
   var numCores = (os.cpus().length > 0) ? os.cpus().length : 1;
   var numConnections = 100;
 
-  // Start Peerflix
-  var peerflix = require('peerflix');
+  // Start Popcornflix (Peerflix)
+  var popcornflix = require('peerflix');
 
-  videoStreamer = peerflix(torrent, {
+  videoStreamer = popcornflix(torrent, {
     // Set the custom temp file
     path: tmpFile,
     //port: 554,
@@ -76,29 +75,30 @@ var playTorrent = window.playTorrent = function (torrent, subs, movieModel, call
         // Unbind the event handler
         $(document).off('videoExit');
 
-        flix = null;
+        delete flix;
       });
     });
   });
 
 };
 
-function videoError(e) {
-  // video playback failed - show a message saying why
-  // TODO: localize
-  switch (e.code) {
-    case e.MEDIA_ERR_ABORTED:
-      return 'The video playback was aborted.';
-    case e.MEDIA_ERR_NETWORK:
-      return 'A network error caused the video download to fail part-way.';
-    case e.MEDIA_ERR_DECODE:
-      return 'The video playback was aborted due to a corruption problem or because the video used features your browser did not support.';
-    case e.MEDIA_ERR_SRC_NOT_SUPPORTED:
-      return 'The video format is not supported.';
-    default:
-      return 'An unknown error occurred.';
-   }
-}
+
+// Supported Languages for Subtitles
+
+window.SubtitleLanguages = {
+  'spanish'   : 'Español',
+  'english'   : 'English',
+  'french'    : 'Français',
+  'turkish'   : 'Türkçe',
+  'romanian'  : 'Română',
+  'portuguese': 'Português',
+  'brazilian' : 'Português-Br',
+  'dutch'     : 'Nederlands',
+  'german'    : 'Deutsch',
+  'hungarian' : 'Magyar',
+  'finnish'   : 'Suomi',
+  'bulgarian' : 'Български',
+  'greek'     : 'Ελληνικά'};
 
 
 // Handles the opening of the video player
@@ -108,10 +108,10 @@ window.spawnVideoPlayer = function (url, subs, movieModel) {
     // Sort sub according lang translation
     var subArray = [];
     for (var lang in subs) {
-        if( !App.Localization.languages[lang].subtitle ){ continue; }
+        if( typeof SubtitleLanguages[lang] == 'undefined' ){ continue; }
         subArray.push({
             'language': lang,
-            'languageName': App.Localization.languages[lang].display,
+            'languageName': SubtitleLanguages[lang],
             'sub': subs[lang]
         });
     }
@@ -150,17 +150,19 @@ window.spawnVideoPlayer = function (url, subs, movieModel) {
     // Init video.
     var video = window.videoPlaying = videojs('video_player', { plugins: { biggerSubtitle : {}, smallerSubtitle : {}, customSubtitles: {} }});
 
-    if(movieModel.has('resumetime')) {
-      video.currentTime(movieModel.get('resumetime'));
-    }
+
+    userTracking.pageview('/movies/watch/'+movieModel.get('slug'), movieModel.get('niceTitle') ).send();
+
 
     // Enter full-screen
     $('.vjs-fullscreen-control').on('click', function () {
       if(win.isFullscreen) {
         win.leaveFullscreen();
+        userTracking.event('Video Size', 'Normal', movieModel.get('niceTitle') ).send();
         win.focus();
       } else {
         win.enterFullscreen();
+        userTracking.event('Video Size', 'Fullscreen', movieModel.get('niceTitle') ).send();
         win.focus();
       }
     });
@@ -170,6 +172,7 @@ window.spawnVideoPlayer = function (url, subs, movieModel) {
       if (e.keyCode == 27) {
         if(win.isFullscreen) {
           win.leaveFullscreen();
+          userTracking.event('Video Size', 'Normal', movieModel.get('niceTitle') ).send();
           win.focus();
         }
       }
@@ -181,6 +184,7 @@ window.spawnVideoPlayer = function (url, subs, movieModel) {
       tracks[i].on('loaded', function(){
         // Trigger a resize to get the subtitles position right
         $(window).trigger('resize');
+        userTracking.event('Video Subtitles', 'Select '+ this.language_, movieModel.get('niceTitle') ).send();
       });
     }
 
@@ -199,33 +203,57 @@ window.spawnVideoPlayer = function (url, subs, movieModel) {
       return timeLabel;
     };
 
+    // Report the movie playback status once every 10 minutes
+    var statusReportInterval = setInterval(function(){
+
+      if( typeof video == 'undefined' || video == null ){ clearInterval(statusReportInterval); return; }
+
+      userTracking.event('Video Playing', movieModel.get('niceTitle'), getTimeLabel(), Math.round(video.currentTime()/60) ).send();
+
+    }, 1000*60*10);
+
 
     // Close player
     $('#video_player_close').on('click', function () {
+
+      // Determine if the user quit because he watched the entire movie
+      // Give 15 minutes or 15% of the movie for credits (everyone quits there)
+      if( video.duration() > 0 && video.currentTime() >= Math.min(video.duration() * 0.85, video.duration() - 15*60) ) {
+        userTracking.event('Video Finished', movieModel.get('niceTitle'), getTimeLabel(), Math.round(video.currentTime()/60) ).send();
+      }
+      else {
+        userTracking.event('Video Quit', movieModel.get('niceTitle'), getTimeLabel(), Math.round(video.currentTime()/60) ).send();
+      }
+
+      // Clear the status report interval so it doesn't leak
+      clearInterval(statusReportInterval);
+
+
       win.leaveFullscreen();
-      if(video.duration() - video.currentTime() > 300) // 5 mins
-        movieModel.set('resumetime', video.currentTime());
       $('#video-container').hide();
       video.dispose();
       $('body').removeClass();
       $(document).trigger('videoExit');
+
     });
 
 
-    // Had only tracking in, leave it here if we want to do something else when paused.
+    // Todo: delay these tracking events so we don't send two on double click
     video.player().on('pause', function () {
-
+      $(document).append('<a href="#" style="display:block;position:relative;z-index:10000000;">sfafgsfdgsfgfsagfsgDFSGEGAVRFSV F FFDS  FWEFSDVKJ .,N GPVFKLNC . -FPVKNC. FLNMVZ. FV;.C PFVCN ;.PFZ;VNV .PP;FDSZV O;DSCVN <a>');
+      //userTracking.event('Video Control', 'Pause Button', getTimeLabel(), Math.round(video.currentTime()/60) ).send();
     });
 
     video.player().on('play', function () {
       // Trigger a resize so the subtitles are adjusted
       $(window).trigger('resize');
+
+      //userTracking.event('Video Control', 'Play Button', getTimeLabel(), Math.round(video.currentTime()/60) ).send();
     });
 
     // There was an issue with the video
     video.player().on('error', function (error) {
-      // TODO: what about some more elegant error tracking
-      alert('Error: ' + videoError(document.getElementById('video_player').player.error()));
+      console.log(error);
     });
 
     App.loader(false);
