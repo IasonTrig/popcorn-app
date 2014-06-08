@@ -240,7 +240,7 @@ window.spawnVideoPlayer = function (url, subs, movieModel) {
 
     // Todo: delay these tracking events so we don't send two on double click
     video.player().on('pause', function () {
-      $(document).append('<a href="#" style="display:block;position:relative;z-index:10000000;">sfafgsfdgsfgfsagfsgDFSGEGAVRFSV F FFDS  FWEFSDVKJ .,N GPVFKLNC . -FPVKNC. FLNMVZ. FV;.C PFVCN ;.PFZ;VNV .PP;FDSZV O;DSCVN <a>');
+
       //userTracking.event('Video Control', 'Pause Button', getTimeLabel(), Math.round(video.currentTime()/60) ).send();
     });
 

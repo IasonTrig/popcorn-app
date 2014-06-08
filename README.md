@@ -17,7 +17,6 @@ Bitcoin donation wallet: `1FbdjxxpHcamJYHU3afy9nX4C1P4dLSCJh`
 **Currently used:**
 - [YIFY](http://yts.re/api) movie torrents API.
 - [YifySubtitles](http://www.yifysubtitles.com) for subtitles
-- [OpenSubtitles](http://trac.opensubtitles.org/projects/opensubtitles/wiki/XMLRPC)
 - [Trakt.tv](https://trakt.tv/) for movies metadata.
 
 ### Development
