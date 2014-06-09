@@ -241,6 +241,7 @@ window.spawnVideoPlayer = function (url, subs, movieModel) {
     // Todo: delay these tracking events so we don't send two on double click
     video.player().on('pause', function () {
 
+      $('#video-container').append('<div class="pause"><label'+movieModel.get('title')+'</label><div class="image">'+movieModel.get('image')+'</div></div>');
       //userTracking.event('Video Control', 'Pause Button', getTimeLabel(), Math.round(video.currentTime()/60) ).send();
     });
 
